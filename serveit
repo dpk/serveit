@@ -9,14 +9,15 @@ class ServeIt
   VERSION = [0, 0, 2]
 
   def self.main
-    serve_dir, port, ignored_paths, command = parse_opts
+    serve_dir, port, ignored_paths, index_files, command = parse_opts
     serve_dir = File.expand_path(serve_dir)
-    Server.new(serve_dir, port, ignored_paths, command).serve
+    Server.new(serve_dir, port, ignored_paths, index_files, command).serve
   end
 
   def self.parse_opts
     options = {:serve_dir => ".",
                :ignored_paths =>  [],
+               :index_files => [],
                :port => 8000}
     parser = OptionParser.new do |opts|
       opts.banner = "Usage: #{$PROGRAM_NAME} [options] command"
@@ -28,6 +29,9 @@ class ServeIt
      end
       opts.on_tail("-i", "--ignore PATH", "Ignore changes to file or directory") do |path|
         options[:ignored_paths] << path
+      end
+      opts.on_tail("-I", "--index FILENAME", "Use a file as a directory index") do |path|
+        options[:index_files] << path
       end
       opts.on_tail("--version", "Show version") do |dir|
         puts ServeIt::VERSION.join('.')
@@ -52,14 +56,15 @@ class ServeIt
       exit 1
     end
 
-    [options.fetch(:serve_dir), options.fetch(:port), options.fetch(:ignored_paths), command]
+    [options.fetch(:serve_dir), options.fetch(:port), options.fetch(:ignored_paths), options.fetch(:index_files), command]
   end
 
   class Server
-    def initialize(serve_dir, port, ignored_paths, command)
+    def initialize(serve_dir, port, ignored_paths, index_files, command)
       @mutex = Mutex.new
       @serve_dir = serve_dir
       @port = port
+      @index_files = index_files
       @command = command
       @rebuilder = Rebuilder.new(@command, ignored_paths) if @command
     end
@@ -108,6 +113,14 @@ class ServeIt
     end
 
     def respond_to_dir(res, rel_path, local_abs_path)
+      index_file = dir_index_file(local_abs_path)
+      if index_file
+        respond_to_file(res, index_file)
+      else
+        respond_to_dir_with_listing(res, rel_path, local_abs_path)
+      end
+    end
+    def respond_to_dir_with_listing(res, rel_path, local_abs_path)
       res.content_type = "text/html"
       res.body = (
         "<p><h3>Listing for /#{rel_path}</h3></p>\n" +
@@ -123,6 +136,16 @@ class ServeIt
     def respond_to_file(res, local_abs_path)
       res.body = File.read(local_abs_path)
       res.content_type = guess_content_type(local_abs_path)
+    end
+
+    def dir_index_file(local_abs_path)
+      @index_files.each do |index_file|
+        local_abs_index_path = File.join(local_abs_path, index_file)
+        if File.file?(local_abs_index_path)
+          return local_abs_index_path
+        end
+      end
+      return nil
     end
 
     def guess_content_type(path)
