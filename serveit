@@ -9,15 +9,16 @@ class ServeIt
   VERSION = [0, 0, 2]
 
   def self.main
-    serve_dir, port, ignored_paths, index_files, command = parse_opts
+    serve_dir, port, ignored_paths, index_files, hide_extensions, command = parse_opts
     serve_dir = File.expand_path(serve_dir)
-    Server.new(serve_dir, port, ignored_paths, index_files, command).serve
+    Server.new(serve_dir, port, ignored_paths, index_files, hide_extensions, command).serve
   end
 
   def self.parse_opts
     options = {:serve_dir => ".",
                :ignored_paths =>  [],
                :index_files => [],
+               :hide_extensions => [],
                :port => 8000}
     parser = OptionParser.new do |opts|
       opts.banner = "Usage: #{$PROGRAM_NAME} [options] command"
@@ -32,6 +33,9 @@ class ServeIt
       end
       opts.on_tail("-I", "--index FILENAME", "Use a file as a directory index") do |path|
         options[:index_files] << path
+      end
+      opts.on_tail("-e", "--hide-extension EXTENSIONS", "Allow a file name extension to be hidden") do |ext|
+        options[:hide_extensions] << ext
       end
       opts.on_tail("--version", "Show version") do |dir|
         puts ServeIt::VERSION.join('.')
@@ -56,15 +60,21 @@ class ServeIt
       exit 1
     end
 
-    [options.fetch(:serve_dir), options.fetch(:port), options.fetch(:ignored_paths), options.fetch(:index_files), command]
+    [options.fetch(:serve_dir),
+     options.fetch(:port),
+     options.fetch(:ignored_paths),
+     options.fetch(:index_files),
+     options.fetch(:hide_extensions),
+     command]
   end
 
   class Server
-    def initialize(serve_dir, port, ignored_paths, index_files, command)
+    def initialize(serve_dir, port, ignored_paths, index_files, hide_extensions, command)
       @mutex = Mutex.new
       @serve_dir = serve_dir
       @port = port
       @index_files = index_files
+      @hide_extensions = hide_extensions
       @command = command
       @rebuilder = Rebuilder.new(@command, ignored_paths) if @command
     end
@@ -134,8 +144,21 @@ class ServeIt
     end
 
     def respond_to_file(res, local_abs_path)
-      res.body = File.read(local_abs_path)
-      res.content_type = guess_content_type(local_abs_path)
+      if File.exist?(local_abs_path)
+        res.body = File.read(local_abs_path)
+        res.content_type = guess_content_type(local_abs_path)
+      else
+        @hide_extensions.each do |ext|
+          path_with_ext = "#{local_abs_path}.#{ext}"
+          if File.exist?(path_with_ext)
+            return respond_to_file(res, path_with_ext)
+          end
+        end
+
+        # no file found, do a 404
+        res.status = 404
+        res.body = "Not Found"
+      end
     end
 
     def dir_index_file(local_abs_path)
