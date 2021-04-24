@@ -34,7 +34,7 @@ class ServeIt
       opts.on_tail("-I", "--index FILENAME", "Use a file as a directory index") do |path|
         options[:index_files] << path
       end
-      opts.on_tail("-e", "--hide-extension EXTENSIONS", "Allow a file name extension to be hidden") do |ext|
+      opts.on_tail("-e", "--hide-extension EXTENSION", "Allow a file name extension to be hidden") do |ext|
         options[:hide_extensions] << ext
       end
       opts.on_tail("--version", "Show version") do |dir|
