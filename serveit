@@ -87,19 +87,11 @@ class ServeIt
         relative_path = req.path.sub(/^\//, '')
         local_abs_path = File.absolute_path(relative_path, @serve_dir)
 
-        if relative_path == "favicon.ico"
-          respond_to_favicon(res)
-        else
-          respond_to_path(res, relative_path, local_abs_path)
-        end
+        respond_to_path(res, relative_path, local_abs_path)
       end
 
       trap 'INT' do server.shutdown end
       server.start
-    end
-
-    def respond_to_favicon(res)
-      res.status = 404
     end
 
     def respond_to_path(res, relative_path, local_abs_path)
