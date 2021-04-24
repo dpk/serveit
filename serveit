@@ -110,8 +110,8 @@ class ServeIt
     end
 
     def respond_to_error(res, message)
-      res.content_type = "text/html"
-      res.body = "<pre>" + message + "</pre>"
+      res.content_type = "text/plain"
+      res.body = message
     end
 
     def respond_to_dir(res, rel_path, local_abs_path)
